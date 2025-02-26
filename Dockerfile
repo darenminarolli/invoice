@@ -1,32 +1,20 @@
-# Use an official Python runtime as a parent image
+# Use a lightweight Python image
 FROM python:3.9-slim
 
-# Prevent Python from writing pyc files and enable output buffering
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
-
-# Set the working directory in the container
+# Set the working directory
 WORKDIR /app
 
-# Install system dependencies (if your app needs any compilation/build tools)
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends gcc build-essential && \
-    rm -rf /var/lib/apt/lists/*
+# Copy only requirements first (for better caching)
+COPY requirements.txt .
 
-# Copy requirements.txt first to leverage Docker cache for dependencies
-COPY requirements.txt /app/
+# Install dependencies
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Create a virtual environment and install Python dependencies
-# (Alternatively, you can install globally; here, we just use pip directly)
-RUN pip install --upgrade pip && \
-    pip install -r requirements.txt
+# Copy the rest of the application
+COPY . .
 
-# Copy the rest of your application code into the container
-COPY . /app/
+# Expose the port Flask/Uvicorn will run on
+EXPOSE 8000
 
-# Expose the port that your Flask app runs on (adjust if needed)
-EXPOSE 5000
-
-# Command to run your Flask app.
-# Ensure your Flask app is set to run on host 0.0.0.0 so it is accessible
-CMD ["python", "app.py"]
+# Run the application using the correct port
+CMD exec uvicorn app:app --host 0.0.0.0 --port ${PORT:-8000}

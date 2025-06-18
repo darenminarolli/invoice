@@ -101,25 +101,55 @@ def process_excel(file):
     for customer, group in projects:
         project_info = group.iloc[0]
         project_id = project_info.get('Unnamed: 1', f"INV-{invoice_count:03d}")
+        company_start_date = project_info.get('Unnamed: 4')
         project_start_date = project_info.get('Unnamed: 5')
         project_end_date = project_info.get('Unnamed: 6')
 
         staff_list = []
+   
+        _, _, _ = get_dates()
+        now = datetime.now()
+        if now.day > 3:
+            target_year = now.year
+            target_month = now.month
+        else:
+            if now.month == 1:
+                target_year = now.year - 1
+                target_month = 12
+            else:
+                target_year = now.year
+                target_month = now.month - 1
+        
         for _, row in group.iterrows():
             role = row.get('Unnamed: 2')
             name = row.get('Unnamed: 3')
-            company_start_date = row.get('Unnamed: 4')
+            person_end_date = row.get('Unnamed: 6') 
+            
             if pd.isnull(role) or pd.isnull(name):
                 continue
-            if pd.notnull(company_start_date):
+            
+            if pd.notnull(person_end_date):
                 try:
-                    company_start_date = pd.to_datetime(company_start_date).strftime("%Y-%m-%d")
+                    end_date_parsed = pd.to_datetime(person_end_date)
+                    print(f"Person {name} end date: {end_date_parsed}")
+                    
+                    if not (end_date_parsed.year == target_year and end_date_parsed.month == target_month):
+                        print(f"Excluding {name} - end date {end_date_parsed.strftime('%Y-%m-%d')} not in target month {target_year}-{target_month:02d}")
+                        continue
+                except Exception as e:
+                    print(f"Error parsing end date for {name}: {e}")
+            
+            start_date = company_start_date
+            if pd.notnull(start_date):
+                try:
+                    start_date = pd.to_datetime(start_date).strftime("%Y-%m-%d")
                 except Exception:
-                    company_start_date = str(company_start_date)
+                    start_date = str(start_date)
+            
             staff_list.append({
                 'role': role,
                 'name': name,
-                'start_date': company_start_date
+                'start_date': start_date
             })
         
         date1, date2, date3 = get_dates()
@@ -164,20 +194,17 @@ def process_excel(file):
             'current_delivery_period': current_delivery_period,
         }
 
-        # Embed logo as base64
+
         with open("static/images/logo-ritech.png", "rb") as image_file:
             encoded_image = base64.b64encode(image_file.read()).decode('utf-8')
 
-        # Render HTML using Jinja template
         rendered_html = render_template('invoice_template.html', invoice=invoice_data, logo=encoded_image)
         
-        # Generate PDF in memory
         pdf_buffer = io.BytesIO()
         HTML(string=rendered_html).write_pdf(pdf_buffer)
         pdf_buffer.seek(0)
         pdf_data = pdf_buffer.read()
         
-        # Safe filename from customer name
         safe_customer_name = "".join(c for c in customer if c.isalnum() or c in (' ', '-', '_')).strip()
         filename = f"{safe_customer_name}.pdf"
         
